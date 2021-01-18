@@ -1,21 +1,59 @@
 import 'package:flutter/material.dart';
 import '../swipe/swipe_detector.dart';
+import 'drawer_navigator.dart';
 
-class InnerDrawer extends StatelessWidget {
+part 'transformed_container.dart';
+part 'inner_drawer_controller.dart';
+
+class InnerDrawer extends StatefulWidget {
   final Widget drawer;
-  final Widget child;
   final InnerDrawerController controller;
   final Color color;
   final Color drawerColor;
+  final RouteFactory onGenerateRoute;
+  final Object initialArguments;
+  final String initialRoute;
 
-  const InnerDrawer({
+  InnerDrawer({
     Key key,
     @required this.drawer,
-    @required this.child,
     @required this.controller,
     this.drawerColor,
     this.color,
+    @required this.onGenerateRoute,
+    this.initialArguments,
+    @required this.initialRoute,
   }) : super(key: key);
+
+  static InnerDrawerState of(BuildContext context) =>
+      context.findAncestorStateOfType<InnerDrawerState>();
+
+  @override
+  InnerDrawerState createState() => InnerDrawerState();
+}
+
+class InnerDrawerState extends State<InnerDrawer> {
+  final _navigatorKey = GlobalKey<DrawerNavigatorState>();
+
+  final List<void Function(bool isDrawerOpen)> _listeners = [];
+
+  void addListener(void Function(bool isDrawerOpen) listener) {
+    _listeners.add(listener);
+  }
+
+  void toggleDrawer() {
+    final isDrawerOpen = widget.controller.toggleDrawer();
+    for (final listener in _listeners) {
+      listener(isDrawerOpen);
+    }
+  }
+
+  void pushNamed(String name, {Object arguments, bool keepAlive = true}) {
+    _navigatorKey.currentState
+        .pushNamed(name, arguments: arguments, keepAlive: keepAlive);
+    widget.controller.toggleDrawer();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -23,133 +61,24 @@ class InnerDrawer extends StatelessWidget {
         Container(
           width: double.infinity,
           height: double.infinity,
-          color: drawerColor ?? Theme.of(context).primaryColor,
-          child: drawer,
+          color: widget.drawerColor ?? Theme.of(context).primaryColor,
+          child: widget.drawer,
         ),
-        _TransformedContainer(
-          controller: controller,
-          child: child,
-          color: color,
+        TransformedContainer(
+          navigatorKey: _navigatorKey,
+          controller: widget.controller,
+          color: widget.color,
+          initialRoute: widget.initialRoute,
+          initialArguments: widget.initialArguments,
+          onGenerateRoute: widget.onGenerateRoute,
         ),
       ],
     );
   }
-}
-
-class InnerDrawerController {
-  final bool open;
-  final double scale;
-  final double dx;
-  final double radius;
-  final Duration duration;
-  void Function() _onToggleDrawer;
-
-  InnerDrawerController({
-    this.open = false,
-    this.scale = 0.6,
-    this.dx = 0.1,
-    this.duration = const Duration(milliseconds: 250),
-    this.radius = 24,
-  });
-
-  void toggleDrawer() {
-    _onToggleDrawer();
-  }
-}
-
-class _TransformedContainer extends StatefulWidget {
-  final Widget child;
-  final InnerDrawerController controller;
-  final Color color;
-
-  const _TransformedContainer({
-    Key key,
-    this.child,
-    @required this.controller,
-    this.color,
-  }) : super(key: key);
-  @override
-  _TransformedContainerState createState() => _TransformedContainerState();
-}
-
-class _TransformedContainerState extends State<_TransformedContainer> {
-  double dx = 0;
-  double dy = 0;
-  double radius = 0;
-  double scale = 1;
-  bool isDrawerOpen = false;
 
   @override
-  void initState() {
-    super.initState();
-    isDrawerOpen = widget.controller.open;
-    if (isDrawerOpen) {
-      dx = MediaQuery.of(context).size.width *
-          (widget.controller.scale - widget.controller.dx);
-      dy = MediaQuery.of(context).size.height *
-          (1 - widget.controller.scale) *
-          0.5;
-      scale = widget.controller.scale;
-      radius = widget.controller.radius;
-    }
-    widget.controller._onToggleDrawer = _toggleDrawer;
-  }
-
-  void _toggleDrawer() {
-    if (!isDrawerOpen)
-      setState(() {
-        dx = MediaQuery.of(context).size.width *
-            (widget.controller.scale - widget.controller.dx);
-        dy = MediaQuery.of(context).size.height *
-            (1 - widget.controller.scale) *
-            0.5;
-        scale = widget.controller.scale;
-        radius = widget.controller.radius;
-        isDrawerOpen = true;
-      });
-    else
-      setState(() {
-        dx = 0;
-        dy = 0;
-        radius = 0;
-        scale = 1;
-        isDrawerOpen = false;
-      });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SwipeDetector(
-      onTap: isDrawerOpen ? _toggleDrawer : null,
-      onSwipeLeft: isDrawerOpen
-          ? () {
-              _toggleDrawer();
-            }
-          : null,
-      onSwipeRight: !isDrawerOpen
-          ? () {
-              _toggleDrawer();
-            }
-          : null,
-      child: AnimatedContainer(
-        width: MediaQuery.of(context).size.width,
-        height: MediaQuery.of(context).size.height,
-        transform: Matrix4.translationValues(dx, dy, 0)..scale(scale),
-        duration: widget.controller.duration,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          color: widget.color ?? Theme.of(context).canvasColor,
-        ),
-        child: SafeArea(
-          child: IgnorePointer(
-            ignoring: isDrawerOpen,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(radius),
-              child: widget.child,
-            ),
-          ),
-        ),
-      ),
-    );
+  void dispose() {
+    super.dispose();
+    _listeners.clear();
   }
 }
